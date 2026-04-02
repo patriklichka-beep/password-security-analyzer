@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Testování síly hesla</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root{
+            --bg1:#4f46e5; --bg2:#22c55e; --card:#ffffff; --muted:#6b7280;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            background: linear-gradient(135deg, var(--bg1), var(--bg2));
+            margin: 0; padding: 0; min-height: 100vh;
+        }
+        .container {
+            max-width: 640px;
+            margin: 90px auto;
+            background: var(--card);
+            padding: 36px;
+            border-radius: 18px;
+            box-shadow: 0 30px 60px rgba(0,0,0,.25);
+            animation: pop .35s ease-out;
+        }
+        @keyframes pop{from{transform:translateY(8px);opacity:.85}to{transform:none;opacity:1}}
+        h1{ text-align:center; margin:0 0 6px }
+        p{ text-align:center; color:var(--muted); margin:0 0 18px }
+        .field{ position:relative }
+        input[type="password"], input[type="text"]{
+            width:100%; padding:14px 52px 14px 14px; font-size:16px;
+            border-radius:12px; border:1px solid #e5e7eb; outline:none;
+        }
+        input:focus{ border-color:#6366f1; box-shadow:0 0 0 4px rgba(99,102,241,.15) }
+        .toggle{
+            position:absolute; right:8px; top:50%; transform:translateY(-50%);
+            width:40px; height:40px; border-radius:10px; border:none;
+            background:#eef2ff; cursor:pointer; font-size:22px;
+            display:flex; align-items:center; justify-content:center;
+            transition:transform .15s, background .15s;
+        }
+        .toggle:hover{ transform:translateY(-50%) scale(1.06); background:#e0e7ff }
+        .strength-bar{ height:14px; width:100%; background:#e5e7eb; border-radius:999px; margin-top:16px; overflow:hidden }
+        .strength-fill{ height:100%; width:0; transition:width .35s ease, background .35s ease }
+        .result{ margin-top:16px; font-weight:700; text-align:center }
+        .details{ margin-top:14px; font-size:14px; color:#111827 }
+        .badges{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px }
+        .badge{ padding:6px 10px; border-radius:999px; font-size:12px; background:#f3f4f6 }
+        ul{ margin:8px 0 0 18px }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Test síly hesla</h1>
+    <p>Zadej heslo a zjisti, jak je bezpečné</p>
+
+    <div class="field">
+        <input type="password" id="password" placeholder="Zadej heslo...">
+        <button class="toggle" id="togglePassword" aria-label="Zobrazit/skrýt heslo">👁️</button>
+    </div>
+
+    <div class="strength-bar">
+        <div class="strength-fill" id="strengthFill"></div>
+    </div>
+
+    <div class="result" id="resultText"></div>
+
+    <div class="details" id="details"></div>
+</div>
+
+    <div class="strength-bar">
+        <div class="strength-fill" id="strengthFill"></div>
+    </div>
+
+    <div class="result" id="resultText"></div>
+
+    <div class="details" id="details"></div>
+</div>
+
+<script>
+    const passwordInput = document.getElementById('password');
+    const togglePassword = document.getElementById('togglePassword');
+    const strengthFill = document.getElementById('strengthFill');
+    const resultText = document.getElementById('resultText');
+    const details = document.getElementById('details');
+
+    togglePassword.addEventListener('click', () => {
+        const show = passwordInput.type === 'password';
+        passwordInput.type = show ? 'text' : 'password';
+        togglePassword.textContent = show ? '🙈' : '👁️';
+    });
+
+    passwordInput.addEventListener('input', () => {
+        const password = passwordInput.value;
+        analyzePassword(password);
+    });
+
+    function analyzePassword(password) {
+        if (password.length === 0) {
+            strengthFill.style.width = '0%';
+            resultText.textContent = '';
+            details.innerHTML = '';
+            return;
+        }
+
+        let charsetSize = 0;
+        let suggestions = [];
+
+        if (/[a-z]/.test(password)) charsetSize += 26;
+        else suggestions.push('přidej malé písmeno');
+
+        if (/[A-Z]/.test(password)) charsetSize += 26;
+        else suggestions.push('přidej velké písmeno');
+
+        if (/[0-9]/.test(password)) charsetSize += 10;
+        else suggestions.push('přidej číslo');
+
+        if (/[^A-Za-z0-9]/.test(password)) charsetSize += 32;
+        else suggestions.push('přidej speciální znak');
+
+        if (password.length < 12) suggestions.push('prodlouž heslo alespoň na 12 znaků');
+
+        const combinations = Math.pow(charsetSize, password.length);
+        const guessesPerSecond = 1e9;
+        const seconds = combinations / guessesPerSecond;
+
+        let strength = 'Slabé';
+        let color = 'red';
+        let width = 25;
+
+        if (seconds > 60 * 60 * 24) {
+            strength = 'Střední';
+            color = 'orange';
+            width = 60;
+        }
+        if (seconds > 60 * 60 * 24 * 365) {
+            strength = 'Silné';
+            color = 'green';
+            width = 100;
+        }
+
+        strengthFill.style.width = width + '%';
+        strengthFill.style.background = color;
+        resultText.textContent = `Síla hesla: ${strength}`;
+
+        details.innerHTML = `
+            <strong>Odhad času prolomení:</strong> ${formatTime(seconds)}<br>
+            <strong>Počet kombinací:</strong> ${combinations.toExponential(2)}
+            <div class="badges">
+                ${/[a-z]/.test(password)?'<span class="badge">malá písmena</span>':''}
+                ${/[A-Z]/.test(password)?'<span class="badge">velká písmena</span>':''}
+                ${/[0-9]/.test(password)?'<span class="badge">čísla</span>':''}
+                ${/[^A-Za-z0-9]/.test(password)?'<span class="badge">speciální znaky</span>':''}
+            </div>
+        `;
+
+        if (suggestions.length > 0) {
+            details.innerHTML += '<br><strong>Doporučení:</strong><ul>';
+            suggestions.forEach(s => {
+                details.innerHTML += `<li>${s}</li>`;
+            });
+            details.innerHTML += '</ul>';
+        }
+    }
+
+    function formatTime(seconds) {
+        if (seconds < 60) return Math.round(seconds) + ' sekund';
+        if (seconds < 3600) return Math.round(seconds / 60) + ' minut';
+        if (seconds < 86400) return Math.round(seconds / 3600) + ' hodin';
+        if (seconds < 31536000) return Math.round(seconds / 86400) + ' dní';
+        return Math.round(seconds / 31536000) + ' let';
+    }
+</script>
+
+</body>
+</html>
