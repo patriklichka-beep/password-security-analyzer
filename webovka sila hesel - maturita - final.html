@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Password Security Analyzer</title>
+
+<style>
+/* DEFINICE GLOBÁLNÍCH PROMĚNNÝCH PRO BARVY (CSS VARIABLES) */
+:root{
+    --bg:#0f172a;      /* Pozadí stránky */
+    --card:#111827;    /* Pozadí hlavního panelu */
+    --primary:#6366f1; /* Hlavní barva tlačítek */
+    --good:#22c55e;    /* Zelená pro silné heslo */
+    --mid:#f59e0b;     /* Oranžová pro střední sílu */
+    --bad:#ef4444;     /* Červená pro slabé heslo */
+}
+
+/* STYLIZACE TĚLA STRÁNKY - Centrování a přechod pozadí */
+body{
+    margin:0;
+    font-family:system-ui;
+    background:radial-gradient(circle at 20% 20%, #1e293b, #0f172a);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    color:white;
+}
+
+/* HLAVNÍ KONTEJNER APLIKACE */
+.card{
+    width:100%;
+    max-width:700px;
+    background:var(--card);
+    padding:40px;
+    border-radius:20px;
+    box-shadow:0 40px 80px rgba(0,0,0,.5);
+}
+
+/* STYL VSTUPNÍHO POLE */
+input{
+    width:100%;
+    padding:16px;
+    border-radius:14px;
+    border:none;
+    outline:none;
+    font-size:16px;
+    box-sizing: border-box; /* Zajišťuje, aby padding nezvětšoval šířku */
+}
+
+/* GRAFICKÝ UKAZATEL SÍLY (PROGRESS BAR) */
+.bar{
+    margin-top:20px;
+    height:14px;
+    background:#1f2937;
+    border-radius:999px;
+    overflow:hidden;
+}
+
+/* VÝPLŇ UKAZATELE - Mění šířku a barvu podle JS */
+.fill{
+    height:100%;
+    width:0%;
+    transition:.4s ease;
+}
+
+/* SEKCE PRO TEXTOVÉ VÝSTUPY (Entropie, čas, feedback) */
+.section{
+    margin-top:20px;
+    font-size:14px;
+    opacity:.9;
+}
+
+/* STYL TLAČÍTKA PRO GENERÁTOR */
+button{
+    margin-top:15px;
+    padding:10px 15px;
+    border:none;
+    border-radius:10px;
+    background:var(--primary);
+    color:white;
+    cursor:pointer;
+    transition: 0.2s;
+}
+button:hover{ opacity: 0.8; }
+</style>
+</head>
+
+<body>
+
+<div class="card">
+    <h1>🔐 Security Analyzer 3.0</h1>
+    <p>Profesionální analýza síly hesla</p>
+
+    <!-- VSTUPNÍ SEKCE - Pole pro heslo + oko pro zobrazení -->
+    <div style="position:relative;">
+        <input type="password" id="password" placeholder="Zadej heslo..." style="padding-right:50px;">
+        <button id="toggle" title="Zobrazit/Skrýt heslo"
+            style="position:absolute; right:10px; top:50%; transform:translateY(-50%);
+            background:none; border:none; cursor:pointer; font-size:18px; margin:0; padding:5px;">
+            👁️
+        </button>
+    </div>
+
+    <!-- VIZUÁLNÍ INDIKÁTOR -->
+    <div class="bar"><div class="fill" id="fill"></div></div>
+
+    <!-- ZDE SE VYPISUJÍ VÝSLEDKY ANALÝZY POMOCÍ JS -->
+    <div class="section" id="entropy"></div>
+    <div class="section" id="crack"></div>
+    <div class="section" id="feedback"></div>
+
+    <!-- TLAČÍTKO PRO GENERÁTOR NÁHODNÝCH HESEL -->
+    <button onclick="generatePassword()">🎲 Vygenerovat silné heslo</button>
+</div>
+
+<script>
+/* INICIALIZACE PROMĚNNÝCH - Propojení s HTML elementy */
+const input=document.getElementById("password");
+const fill=document.getElementById("fill");
+const entropyEl=document.getElementById("entropy");
+const crackEl=document.getElementById("crack");
+const feedback=document.getElementById("feedback"); 
+const toggle = document.getElementById("toggle");
+
+/* FUNKCE PRO PŘEPÍNÁNÍ VIDITELNOSTI HESLA (Očko) */
+toggle.addEventListener("click", () => {
+    if(input.type === "password"){
+        input.type = "text";
+        toggle.textContent = "🙈";
+    } else {
+        input.type = "password";
+        toggle.textContent = "👁️";
+    }
+});
+
+/* EVENT LISTENER - Spustí analýzu pokaždé, když uživatel napíše znak */
+input.addEventListener("input",()=>analyze(input.value));
+
+/**
+ * HLAVNÍ ANALYTICKÁ FUNKCE
+ * Sdružuje výpočty, aktualizuje UI a vypisuje výsledky
+ */
+function analyze(password){
+    // Reset polí, pokud je vstup prázdný
+    if(!password){
+        fill.style.width="0%";
+        entropyEl.innerHTML="";
+        crackEl.innerHTML="";
+        feedback.innerHTML="";
+        return;
+    }
+
+    // 1. Výpočet matematické síly (Entropie)
+    const entropy = calculateEntropy(password);
+    
+    // 2. Aktualizace grafického ukazatele (max 100%)
+    const score = Math.min(entropy,100);
+    fill.style.width=score+"%";
+    fill.style.background=colorByEntropy(entropy);
+
+    // 3. Výpis entropie do dokumentu
+    entropyEl.innerHTML="<strong>Entropie:</strong> "+entropy.toFixed(2)+" bitů";
+
+    // 4. Odhad času prolomení (Offline GPU vs Online omezené pokusy)
+    const crackTimeOffline = estimateCrackTime(entropy, 1e12); // 1 bilion pokusů/s (super GPU)
+    const crackTimeOnline = estimateCrackTime(entropy, 100);   // 100 pokusů/s (webová ochrana)
+
+    crackEl.innerHTML=
+        "<strong>Offline útok (GPU):</strong> "+formatTime(crackTimeOffline)+"<br>"+
+        "<strong>Online útok:</strong> "+formatTime(crackTimeOnline);
+
+    // 5. Kontrola slovníkových a klávesnicových vzorů
+    feedback.innerHTML=patternCheck(password);
+}
+
+/**
+ * VÝPOČET ENTROPIE (H = L * log2(R))
+ * L = délka hesla, R = velikost znakové sady
+ */
+function calculateEntropy(password){
+    let charset=0;
+    if(/[a-z]/.test(password)) charset+=26; // Malá písmena
+    if(/[A-Z]/.test(password)) charset+=26; // Velká písmena
+    if(/[0-9]/.test(password)) charset+=10; // Číslice
+    if(/[^A-Za-z0-9]/.test(password)) charset+=32; // Speciální znaky
+    
+    // Logaritmický výpočet: délka * log2(velikost sady)
+    return password.length * Math.log2(charset || 1);
+}
+
+/**
+ * ODHAD ČASU PROLOMENÍ
+ * vzorec: T = (2^E) / rychlost_pokusů
+ */
+function estimateCrackTime(entropy, guessesPerSecond){
+    const combinations=Math.pow(2,entropy);
+    return combinations/guessesPerSecond;
+}
+
+/**
+ * FORMÁTOVÁNÍ ČASU DO SROZUMITELNÉ PODOBY
+ */
+function formatTime(seconds){
+    if(seconds < 1) return "Okamžitě";
+    if(seconds < 60) return Math.round(seconds)+" sekund";
+    if(seconds < 3600) return Math.round(seconds/60)+" minut";
+    if(seconds < 86400) return Math.round(seconds/3600)+" hodin";
+    if(seconds < 31536000) return Math.round(seconds/86400)+" dní";
+    return Math.round(seconds/31536000)+" let";
+}
+
+/**
+ * URČENÍ BARVY PODLE POČTU BITŮ (LOGIKA SEMAFORU)
+ */
+function colorByEntropy(e){
+    if(e < 40) return "var(--bad)";     // Kriticky slabé
+    if(e < 60) return "var(--mid)";     // Průměrné
+    if(e < 80) return "#eab308";        // Dobré
+    return "var(--good)";               // Vynikající
+}
+
+/**
+ * HEURISTICKÁ KONTROLA VZORŮ (REGULÁRNÍ VÝRAZY)
+ * Hledá chyby, které samotná matematika entropie nemusí zachytit
+ */
+function patternCheck(password){
+    let issues=[];
+    // Kontrola 3 a více stejných znaků po sobě (např. "aaaa")
+    if(/(.)\1{2,}/.test(password)) issues.push("Opakující se znaky");
+    // Kontrola běžných sekvencí (case insensitive)
+    if(/123|abc|qwerty/i.test(password)) issues.push("Sekvence nebo klávesnicový vzor");
+    // Doporučená minimální délka
+    if(password.length < 12) issues.push("Krátké heslo (doporučeno aspoň 12)");
+
+    if(issues.length === 0) return "<span style='color:var(--good)'>✅ Bez zjevných slabin</span>";
+    return "<strong>Slabiny:</strong><ul><li>"+issues.join("</li><li>")+"</li></ul>";
+}
+
+/**
+ * GENERÁTOR KRYPTOGRAFICKY BEZPEČNÝCH HESEL
+ * Využívá window.crypto pro skutečnou náhodnost (ne Math.random)
+ */
+function generatePassword(){
+    const chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
+    let arr=new Uint32Array(16); // 16 znaků
+    window.crypto.getRandomValues(arr); // Naplnění pole bezpečnou náhodou
+    let pass="";
+    arr.forEach(x=>pass+=chars[x%chars.length]);
+    input.value=pass;
+    analyze(pass); // Okamžité spuštění analýzy pro vygenerované heslo
+}
+</script>
+
+</body>
+</html>
